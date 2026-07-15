@@ -14,7 +14,8 @@ from ckan.tests import factories, helpers
 import ckan.lib.uploader
 from ckanext.downloadall.tasks import (
     update_zip, canonized_datapackage, save_local_path_in_datapackage_resource,
-    hash_datapackage, generate_datapackage_json, download_resource_into_zip)
+    hash_datapackage, generate_datapackage_json, download_resource_into_zip,
+    resource_filename)
 import ckanapi
 
 
@@ -551,6 +552,20 @@ class TestSaveLocalPathInDatapackageResource(object):
         save_local_path_in_datapackage_resource(
             datapackage['resources'][1], res, 'annual-csv0.csv')
         assert datapackage == local_datapackage
+
+
+class TestResourceFilename(object):
+    def test_uses_datapackage_filename_when_format_is_known(self):
+        assert resource_filename(
+            {'url': 'https://example.com/download/data.dat'},
+            {'name': 'resource-name', 'format': 'DAT'},
+        ) == 'resource-name.dat'
+
+    def test_preserves_url_filename_when_format_is_missing(self):
+        assert resource_filename(
+            {'url': 'https://example.com/dataset/x/download/result.dat'},
+            {'name': '_', 'format': ''},
+        ) == 'result.dat'
 
 
 class TestHashDataPackage(object):

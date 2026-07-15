@@ -165,7 +165,8 @@ def _iter_resource_chunks(res, chunk_size=1 << 20):
 
 def _stream_zip_response(pkg_dict, context=None):
     """Build and return a Flask streaming Response for the dataset ZIP."""
-    from ckanext.downloadall.tasks import generate_datapackage_json
+    from ckanext.downloadall.tasks import (
+        generate_datapackage_json, resource_filename)
 
     dataset_name = pkg_dict.get(u'name', u'dataset')
 
@@ -188,7 +189,7 @@ def _stream_zip_response(pkg_dict, context=None):
             # ckanapi.datapackage.resource_filename() requires 'format' to be
             # present; default to empty string when the resource has none.
             dres.setdefault(u'format', u'')
-            filename = ckanapi.datapackage.resource_filename(dres)
+            filename = resource_filename(res, dres)
             log.debug(
                 u'downloadall stream: adding %s from %s', filename, url)
             zs.add(_iter_resource_chunks(res), arcname=filename)

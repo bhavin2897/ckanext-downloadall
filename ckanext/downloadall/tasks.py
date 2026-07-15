@@ -4,6 +4,7 @@ import math
 import os
 import tempfile
 import zipfile
+from urllib.parse import unquote, urlparse
 
 import ckanapi
 import ckanapi.datapackage
@@ -281,7 +282,7 @@ def write_zip(fp, datapackage, ckan_and_datapackage_resources, dataset_metadata_
             # ckanapi.datapackage.resource_filename() requires 'format' to be
             # present; default to empty string when the resource has none.
             dres.setdefault('format', '')
-            filename = ckanapi.datapackage.resource_filename(dres)
+            filename = resource_filename(res, dres)
             try:
                 download_resource_into_zip(
                     res['url'], filename, zipf,
@@ -306,6 +307,27 @@ def write_zip(fp, datapackage, ckan_and_datapackage_resources, dataset_metadata_
     log.info('Zip created: {} {} bytes'.format(fp.name, filesize))
 
     return filesize
+
+
+def resource_filename(res, datapackage_resource):
+    """
+    Return the filename to use inside the ZIP for a resource.
+
+    ckanapi's datapackage helper builds names from the datapackage ``name`` and
+    ``format``.  When CKAN has no format, scientific files such as ``.dat`` can
+    end up as extensionless entries like ``_``.  In that case, preserve the
+    filename from the resource URL before falling back to metadata names.
+    """
+    resource_format = datapackage_resource.get('format')
+    if resource_format:
+        return ckanapi.datapackage.resource_filename(datapackage_resource)
+
+    url_path = urlparse(res.get('url') or '').path
+    url_filename = unquote(os.path.basename(url_path.rstrip('/')))
+    if url_filename and url_filename not in ('download', 'resource'):
+        return url_filename
+
+    return datapackage_resource.get('name') or res.get('name') or res.get('id')
 
 
 def save_local_path_in_datapackage_resource(datapackage_resource, res,
