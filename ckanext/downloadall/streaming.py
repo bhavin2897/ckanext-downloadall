@@ -89,7 +89,7 @@ def download_all(dataset_id):
         toolkit.abort(403, toolkit._(u'Not authorised to read this dataset'))
 
     if should_stream(pkg_dict):
-        return _stream_zip_response(pkg_dict)
+        return _stream_zip_response(pkg_dict, context=context)
 
     # Small dataset – redirect to the pre-generated bundle resource.
     bundle_res = _find_bundle_resource(pkg_dict)
@@ -104,7 +104,7 @@ def download_all(dataset_id):
         u'falling back to on-demand streaming.',
         dataset_id,
     )
-    return _stream_zip_response(pkg_dict)
+    return _stream_zip_response(pkg_dict, context=context)
 
 
 def _find_bundle_resource(pkg_dict):
@@ -163,7 +163,7 @@ def _iter_resource_chunks(res, chunk_size=1 << 20):
             r.close()
 
 
-def _stream_zip_response(pkg_dict):
+def _stream_zip_response(pkg_dict, context=None):
     """Build and return a Flask streaming Response for the dataset ZIP."""
     from ckanext.downloadall.tasks import generate_datapackage_json
 
@@ -171,7 +171,7 @@ def _stream_zip_response(pkg_dict):
 
     try:
         datapackage, ckan_and_dp_resources, _ = \
-            generate_datapackage_json(pkg_dict[u'id'])
+            generate_datapackage_json(pkg_dict[u'id'], context=context)
     except Exception as exc:
         log.error(
             u'downloadall streaming: could not generate datapackage for '

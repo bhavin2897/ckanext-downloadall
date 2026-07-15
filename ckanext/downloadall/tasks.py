@@ -200,17 +200,24 @@ def canonized_datapackage(datapackage):
     return datapackage_
 
 
-def generate_datapackage_json(package_id):
+def generate_datapackage_json(package_id, context=None):
     '''Generates the datapackage - metadata that would be saved as
     datapackage.json.
     '''
-    site_user = get_action('get_site_user')({'ignore_auth': True}, {})
-    context = {
-        'model': model,
-        'session': model.Session,
-        'user': site_user['name'],
-        'ignore_auth': False,
-    }
+    if context is None:
+        site_user = get_action('get_site_user')({'ignore_auth': True}, {})
+        context = {
+            'model': model,
+            'session': model.Session,
+            'user': site_user['name'],
+            'ignore_auth': False,
+        }
+    else:
+        context = dict(context)
+        context.setdefault('model', model)
+        context.setdefault('session', model.Session)
+        context.setdefault('ignore_auth', False)
+
     dataset = get_action('package_show')(
         context, {'id': package_id})
 
