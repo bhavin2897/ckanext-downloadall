@@ -19,6 +19,8 @@ from datetime import datetime
 
 log = __import__('logging').getLogger(__name__)
 
+ZIP_WRITE_CHUNK_SIZE = 1024 * 1024
+
 
 def parse_metadata_modified_to_date_time(metadata_modified):
     '''
@@ -411,16 +413,6 @@ def download_resource_into_zip(url, filename, zipf, resource_id=None, package_id
 
                     log.debug('Using local file: {}'.format(filepath))
 
-                    # Read file content
-                    with open(filepath, 'rb') as local_file:
-                        file_content = local_file.read()
-
-                    # Calculate hash
-                    hash_object = hashlib.md5()
-                    hash_object.update(file_content)
-                    file_hash = hash_object.hexdigest()
-                    size = len(file_content)
-
                     # Create ZipInfo with proper timestamp from resource_show
                     zinfo = zipfile.ZipInfo(filename=filename)
                     date_time = parse_metadata_modified_to_date_time(resource_metadata_modified)
@@ -434,9 +426,10 @@ def download_resource_into_zip(url, filename, zipf, resource_id=None, package_id
                         log.warning('Using current time for {} - failed to parse metadata_modified'.format(filename))
                     zinfo.compress_type = zipfile.ZIP_DEFLATED
 
-                    # Use writestr to properly preserve timestamp
-                    zipf.writestr(zinfo, file_content)
-                    log.info('Wrote {} bytes to ZIP with filename "{}"'.format(len(file_content), filename))
+                    with open(filepath, 'rb') as local_file:
+                        size, file_hash = write_fileobj_to_zip(
+                            zipf, zinfo, local_file)
+                    log.info('Wrote {} bytes to ZIP with filename "{}"'.format(size, filename))
 
                     log.debug(
                         'Added from local storage: {}, hash: {}'
@@ -477,17 +470,6 @@ def download_resource_into_zip(url, filename, zipf, resource_id=None, package_id
                   .format(url=url, error=str(e)))
         raise DownloadError()
 
-    # Download content to memory
-    file_content = b''
-    hash_object = hashlib.md5()
-
-    for chunk in r.iter_content(chunk_size=8192):
-        file_content += chunk
-        hash_object.update(chunk)
-
-    size = len(file_content)
-    file_hash = hash_object.hexdigest()
-
     # Create ZipInfo with proper timestamp
     # For remote resources, try to get metadata from resource_show if available
     resource_metadata_modified = None
@@ -520,11 +502,47 @@ def download_resource_into_zip(url, filename, zipf, resource_id=None, package_id
         log.warning('Using current time for {} - failed to parse metadata_modified'.format(filename))
     zinfo.compress_type = zipfile.ZIP_DEFLATED
 
-    # Use writestr to properly preserve timestamp
-    zipf.writestr(zinfo, file_content)
+    try:
+        size, file_hash = write_chunks_to_zip(
+            zipf, zinfo, r.iter_content(chunk_size=ZIP_WRITE_CHUNK_SIZE))
+    finally:
+        r.close()
 
     log.debug('Downloaded {}, hash: {}'
               .format(format_bytes(size), file_hash))
+
+
+def write_fileobj_to_zip(zipf, zinfo, fileobj):
+    def chunks():
+        while True:
+            chunk = fileobj.read(ZIP_WRITE_CHUNK_SIZE)
+            if not chunk:
+                break
+            yield chunk
+
+    return write_chunks_to_zip(zipf, zinfo, chunks())
+
+
+def write_chunks_to_zip(zipf, zinfo, chunks):
+    """
+    Stream chunks into a single ZIP member.
+
+    ``ZipFile.writestr`` requires the whole resource in memory.  Opening the
+    member for writing keeps memory bounded for multi-GB uploads and remote
+    resources.
+    """
+    hash_object = hashlib.md5()
+    size = 0
+
+    with zipf.open(zinfo, 'w', force_zip64=True) as dest:
+        for chunk in chunks:
+            if not chunk:
+                continue
+            dest.write(chunk)
+            hash_object.update(chunk)
+            size += len(chunk)
+
+    return size, hash_object.hexdigest()
 
 
 def write_datapackage_json(datapackage, zipf, metadata_modified=None):

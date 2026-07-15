@@ -14,7 +14,7 @@ from ckan.tests import factories, helpers
 import ckan.lib.uploader
 from ckanext.downloadall.tasks import (
     update_zip, canonized_datapackage, save_local_path_in_datapackage_resource,
-    hash_datapackage, generate_datapackage_json)
+    hash_datapackage, generate_datapackage_json, download_resource_into_zip)
 import ckanapi
 
 
@@ -392,6 +392,34 @@ class TestUpdateZip(object):
                     'path': 'https://example.com/data.csv',
                     'title': 'rainfall',
                     }]
+
+    @mock.patch('ckanext.downloadall.tasks.get_resource_size', return_value=None)
+    @mock.patch('ckanext.downloadall.tasks.requests.get')
+    def test_download_resource_into_zip_streams_http_chunks(self, get_, _):
+        class FakeResponse(object):
+            def raise_for_status(self):
+                pass
+
+            def iter_content(self, chunk_size):
+                assert chunk_size > 8192
+                yield b'a' * 3
+                yield b''
+                yield b'b' * 2
+
+            def close(self):
+                pass
+
+        get_.return_value = FakeResponse()
+
+        with tempfile.NamedTemporaryFile() as fp:
+            with zipfile.ZipFile(fp, 'w', zipfile.ZIP_DEFLATED,
+                                 allowZip64=True) as zip_:
+                download_resource_into_zip(
+                    'https://example.com/data.h5', 'data.h5', zip_)
+
+            fp.seek(0)
+            with zipfile.ZipFile(fp) as zip_:
+                assert zip_.read('data.h5') == b'aaabb'
 
 
 local_datapackage = {
