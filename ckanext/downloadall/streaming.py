@@ -13,6 +13,7 @@ Requires:
 """
 
 import logging
+import os
 
 import requests
 import zipstream  # zipstream-ng
@@ -22,6 +23,7 @@ import ckan.plugins.toolkit as toolkit
 import ckanapi
 import ckanapi.datapackage
 import ckanapi.cli.utils
+from ckan.lib import uploader
 
 from ckan import model
 
@@ -87,7 +89,7 @@ def download_all(dataset_id):
         toolkit.abort(403, toolkit._(u'Not authorised to read this dataset'))
 
     if should_stream(pkg_dict):
-        return _stream_zip_response(pkg_dict)
+        return _stream_zip_response(pkg_dict, context=context)
 
     # Small dataset – redirect to the pre-generated bundle resource.
     bundle_res = _find_bundle_resource(pkg_dict)
@@ -102,7 +104,7 @@ def download_all(dataset_id):
         u'falling back to on-demand streaming.',
         dataset_id,
     )
-    return _stream_zip_response(pkg_dict)
+    return _stream_zip_response(pkg_dict, context=context)
 
 
 def _find_bundle_resource(pkg_dict):
@@ -113,8 +115,39 @@ def _find_bundle_resource(pkg_dict):
     return None
 
 
-def _iter_resource_chunks(url, chunk_size=1 << 16):
-    """Generator: yield raw bytes from *url* in chunks."""
+def _iter_file_chunks(filepath, chunk_size=1 << 20):
+    """Generator: yield raw bytes from a local file in chunks."""
+    with open(filepath, 'rb') as fp:
+        while True:
+            chunk = fp.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
+
+
+def _iter_resource_chunks(res, chunk_size=1 << 20):
+    """Generator: yield raw bytes for a CKAN resource in chunks."""
+    url = res.get(u'url')
+
+    if res.get(u'url_type') == u'upload' and res.get(u'id'):
+        try:
+            upload = uploader.get_resource_uploader(res)
+            filepath = upload.get_path(res[u'id'])
+            if filepath and os.path.exists(filepath):
+                log.debug(
+                    u'downloadall streaming: using local file %s', filepath)
+                yield from _iter_file_chunks(filepath, chunk_size)
+                return
+        except Exception as exc:
+            log.warning(
+                u'downloadall streaming: could not read local file for '
+                u'resource %s – %s. Falling back to HTTP.',
+                res.get(u'id'), exc)
+
+    if not url:
+        return
+
+    r = None
     try:
         r = requests.get(url, stream=True, timeout=60)
         r.raise_for_status()
@@ -125,17 +158,21 @@ def _iter_resource_chunks(url, chunk_size=1 << 16):
         log.error(
             u'downloadall streaming: failed to fetch %s – %s', url, exc)
         # Yield nothing; the entry appears as an empty file inside the ZIP.
+    finally:
+        if r is not None:
+            r.close()
 
 
-def _stream_zip_response(pkg_dict):
+def _stream_zip_response(pkg_dict, context=None):
     """Build and return a Flask streaming Response for the dataset ZIP."""
-    from ckanext.downloadall.tasks import generate_datapackage_json
+    from ckanext.downloadall.tasks import (
+        generate_datapackage_json, resource_filename)
 
     dataset_name = pkg_dict.get(u'name', u'dataset')
 
     try:
         datapackage, ckan_and_dp_resources, _ = \
-            generate_datapackage_json(pkg_dict[u'id'])
+            generate_datapackage_json(pkg_dict[u'id'], context=context)
     except Exception as exc:
         log.error(
             u'downloadall streaming: could not generate datapackage for '
@@ -152,10 +189,10 @@ def _stream_zip_response(pkg_dict):
             # ckanapi.datapackage.resource_filename() requires 'format' to be
             # present; default to empty string when the resource has none.
             dres.setdefault(u'format', u'')
-            filename = ckanapi.datapackage.resource_filename(dres)
+            filename = resource_filename(res, dres)
             log.debug(
                 u'downloadall stream: adding %s from %s', filename, url)
-            zs.add(_iter_resource_chunks(url), arcname=filename)
+            zs.add(_iter_resource_chunks(res), arcname=filename)
 
         # Add the same datapackage.json manifest as the pre-generated ZIP.
         manifest_bytes = ckanapi.cli.utils.pretty_json(datapackage)

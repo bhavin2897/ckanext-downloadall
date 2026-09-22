@@ -49,8 +49,9 @@ This extension uses a hybrid approach for zip generation:
 |--------------|---------------|
 | 2.8 and earlier | No |
 | 2.9 | Yes |
-| 2.10 | Yes – not tested though |
-| 2.11 and later | Unknown |
+| 2.10 | Yes |
+| 2.11 | Yes |
+| 2.12 and later | Unknown |
 
 Designed to work with CKAN 2.9+
 
