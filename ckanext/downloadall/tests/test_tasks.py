@@ -12,6 +12,7 @@ import requests
 
 from ckan.tests import factories, helpers
 import ckan.lib.uploader
+import ckan.plugins.toolkit as toolkit
 from ckanext.downloadall.tasks import (
     update_zip, canonized_datapackage, save_local_path_in_datapackage_resource,
     hash_datapackage, generate_datapackage_json, download_resource_into_zip,
@@ -25,6 +26,10 @@ real_open = open
 fs = fake_filesystem.FakeFilesystem()
 fake_os = fake_filesystem.FakeOsModule(fs)
 fake_open = fake_filesystem.FakeFileOpen(fs)
+
+
+def allow_solr_requests():
+    responses.add_passthru(toolkit.config['solr_url'])
 
 
 def mock_open_if_open_fails(*args, **kwargs):
@@ -77,7 +82,7 @@ class TestUpdateZip(object):
             'https://example.com/data.csv',
             body='a,b,c'
         )
-        responses.add_passthru('http://localhost:8983/solr')
+        allow_solr_requests()
         dataset = factories.Dataset(
             title='Test Dataset',
             notes='Just another test dataset.',
@@ -125,7 +130,7 @@ class TestUpdateZip(object):
             'https://example.com/data.csv',
             body='a,b,c'
         )
-        responses.add_passthru('http://localhost:8983/solr')
+        allow_solr_requests()
         dataset = factories.Dataset(resources=[{
             'url': 'https://example.com/data.csv',
             'format': 'csv',
@@ -149,7 +154,7 @@ class TestUpdateZip(object):
             'https://example.com/data.csv',
             body='a,b,c'
         )
-        responses.add_passthru('http://localhost:8983/solr')
+        allow_solr_requests()
         dataset = factories.Dataset(resources=[{
             'url': 'https://example.com/data.csv',
             'format': 'csv',
@@ -170,7 +175,7 @@ class TestUpdateZip(object):
             'https://example.com/data.csv',
             body='a,b,c'
         )
-        responses.add_passthru('http://localhost:8983/solr')
+        allow_solr_requests()
         dataset = factories.Dataset(resources=[{
             'url': 'https://example.com/data.csv',
             'format': 'csv',
@@ -190,7 +195,7 @@ class TestUpdateZip(object):
             'https://example.com/data.csv',
             body='a,b,c'
         )
-        responses.add_passthru('http://localhost:8983/solr')
+        allow_solr_requests()
         dataset = factories.Dataset(resources=[{
             'url': 'https://example.com/data.csv',
             'format': 'csv',
@@ -212,7 +217,7 @@ class TestUpdateZip(object):
             'https://example.com/data.csv',
             body='a,b,c'
         )
-        responses.add_passthru('http://localhost:8983/solr')
+        allow_solr_requests()
         dataset = factories.Dataset(resources=[{
             'url': 'https://example.com/data.csv',
             'format': 'csv',
@@ -229,11 +234,15 @@ class TestUpdateZip(object):
     @helpers.change_config('ckan.storage_path', '/doesnt_exist')
     @responses.activate
     def test_uploaded_resource(self, _):
-        responses.add_passthru('http://localhost:8983/solr')
+        allow_solr_requests()
         csv_content = 'Test,csv'
         responses.add(
             responses.GET,
-            re.compile(r'http://test.ckan.net/dataset/.*/download/.*'),
+            re.compile(
+                r'{}\/dataset\/.+\/download\/.+'.format(
+                    re.escape(toolkit.config['ckan.site_url'].rstrip('/'))
+                )
+            ),
             body=csv_content
         )
         dataset = factories.Dataset()
@@ -288,7 +297,7 @@ class TestUpdateZip(object):
             'https://example.com/data.csv',
             body='Date,Price\n1/6/2017,4.00\n2/6/2017,4.12'
         )
-        responses.add_passthru('http://localhost:8983/solr')
+        allow_solr_requests()
         dataset = factories.Dataset(resources=[{
             'url': 'https://example.com/data.csv',
             'format': 'csv',
@@ -319,7 +328,7 @@ class TestUpdateZip(object):
     @helpers.change_config('ckan.storage_path', '/doesnt_exist')
     @responses.activate
     def test_resource_url_with_connection_error(self, _):
-        responses.add_passthru('http://localhost:8983/solr')
+        allow_solr_requests()
         responses.add(
             responses.GET,
             'https://example.com/data.csv',
@@ -358,7 +367,7 @@ class TestUpdateZip(object):
     @helpers.change_config('ckan.storage_path', '/doesnt_exist')
     @responses.activate
     def test_resource_url_with_404_error(self, _):
-        responses.add_passthru('http://localhost:8983/solr')
+        allow_solr_requests()
         responses.add(
             responses.GET,
             'https://example.com/data.csv',
@@ -396,7 +405,8 @@ class TestUpdateZip(object):
 
     @mock.patch('ckanext.downloadall.tasks.get_resource_size', return_value=None)
     @mock.patch('ckanext.downloadall.tasks.requests.get')
-    def test_download_resource_into_zip_streams_http_chunks(self, get_, _):
+    def test_download_resource_into_zip_streams_http_chunks(
+            self, get_, _, __):
         class FakeResponse(object):
             def raise_for_status(self):
                 pass
