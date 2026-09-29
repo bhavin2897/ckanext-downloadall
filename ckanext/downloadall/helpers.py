@@ -24,6 +24,9 @@ def pop_zip_resource(pkg):
     package and returns it. NB the package doesn't have the zip resource in it
     any more.
     '''
+    if not pkg:
+        return None
+
     zip_res = None
     non_zip_resources = []
     for res in pkg.get('resources', []):
