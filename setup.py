@@ -49,13 +49,16 @@ setup(
         # Pick your license as you wish (should match "license" above)
         'License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)',
 
-        # Specify the Python versions you support here. In particular, ensure
-        # that you indicate whether you support Python 2, Python 3 or both.
+        'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Framework :: CKAN',
     ],
 
+    python_requires='>=3.8',
 
     # What does your project relate to?
     keywords='''CKAN download''',
@@ -63,6 +66,7 @@ setup(
     # You can just specify the packages manually here if your project is
     # simple. Or you can use find_packages().
     packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
+    namespace_packages=['ckanext'],
 
     install_requires=[
         'ckanapi>=4.3',
