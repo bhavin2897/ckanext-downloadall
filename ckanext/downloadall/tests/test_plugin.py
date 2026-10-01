@@ -145,3 +145,15 @@ class TestQueueName(object):
         """get_queue_name() falls back to DEFAULT_QUEUE_NAME."""
         from ckanext.downloadall import helpers as da_helpers
         assert da_helpers.get_queue_name() == DEFAULT_QUEUE_NAME
+
+
+@pytest.mark.ckan_config('ckan.plugins', 'downloadall')
+@pytest.mark.usefixtures('with_plugins')
+def test_new_dataset_form_does_not_build_an_empty_resource_route(app):
+    """The new dataset form must not try to build ``_resource.new``."""
+    sysadmin = factories.Sysadmin()
+    token = factories.APIToken(user=sysadmin['id'])['token']
+
+    response = app.get('/dataset/new', headers={'Authorization': token})
+
+    assert response.status_code == 200
