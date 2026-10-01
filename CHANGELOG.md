@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Prevented the CKAN 2.11 dataset creation page from trying to build the invalid
+  `_resource.new` endpoint when the resource sidebar receives an empty package.
+
 ## [0.3.0] - 2026-04-08
 
 ### Added 
